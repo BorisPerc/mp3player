@@ -19,7 +19,7 @@ require_once('global.php');
 	</li>
 
 	<li class='option tracklisting'>
-		<a href='https://github.com/piramidestudio/audio' target='_blank'><img src='img/down.svg'>Download the update package on GitHub</a>
+		<a href='https://github.com/BorisPerc/mp3player/blob/main/' target='_blank'><img src='img/down.svg'>Download the update package on GitHub</a>
 	</li>
 <?php } else { ?>
 	<li class='option tracklisting'>
