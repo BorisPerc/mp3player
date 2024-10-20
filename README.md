@@ -117,15 +117,28 @@ http://localhost/phpmyadmin/
 User accounts
 
   Add user account
+  
   User name:  mp3player
+  
   Host name:  localhost
+  
   Password:   mp3player
 
   Create database with same name and grant all privileges.
+  
   Grant all privileges on wildcard name (username\_%).
+  
   Global privileges Check all
 
 Setup database.php and visit your url of app
 
+
+  Edit scan.php and put your root data of music:
+
+  scan.php
+
+  line 34 example put your music disk Windows
+
+  $MUSIC_DIR = "I:/Audio mp3/";
 
   
