@@ -109,3 +109,23 @@ Found a bug? Great! Please report it (preferably with a ready-to-use fix for it 
 
 # ToDo and planned features
 Visit the GitHub page for more information.
+
+# Windows XAmpp php7.4 install setup
+
+http://localhost/phpmyadmin/
+
+User accounts
+
+  Add user account
+  User name:  mp3player
+  Host name:  localhost
+  Password:   mp3player
+
+  Create database with same name and grant all privileges.
+  Grant all privileges on wildcard name (username\_%).
+  Global privileges Check all
+
+Setup database.php and visit your url of app
+
+
+  
