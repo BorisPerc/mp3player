@@ -11,7 +11,7 @@ require_once('global.php');
 			<img id='aboutLogo' src='img/mp3player.png'>
 			<b>mp3Player html multimedia server (library and player) <?php echo $CVERSION; ?></b>
 			<br>Licensed under the terms of the <a href='#' onclick="ajaxRequest('content','library.php?view=license');">GPLv2</a>
-			<br><a href="https://github.com/piramidestudio/audio" target="_blank">Fork me on GitHub</a>
+			<br><a href="https://github.com/BorisPerc/mp3player" target="_blank">Fork me on GitHub</a>
 			<br>&copy; 2019 Audio Server
 		</p>
 		<p>
