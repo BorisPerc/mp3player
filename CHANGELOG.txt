@@ -1,6 +1,3 @@
-1.0.0
-PHP 7.4 + mp3player
-
 v1.0.0
 - [new] play mode: repeat playlist, repeat track, do not repeat
 - [fix] correct escaping of quotes in html's "title" attribute
@@ -34,4 +31,3 @@ v1.0.0
 - [fix] freezes caused by long running scripts (music.php, scan.php) which do not release the php session file lock
 - [new] add tracks to playlist by browsing albums and artists, not only tracks
 - [new] basic video support (.mp4)
-
