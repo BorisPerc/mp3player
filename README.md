@@ -139,6 +139,6 @@ Setup database.php and visit your url of app
 
   line 34 example put your music disk Windows
 
-  $MUSIC_DIR = "I:/Audio mp3/";
+  $MUSIC_DIR = "D:/Audio mp3/";
 
   
