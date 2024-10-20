@@ -25,7 +25,7 @@ function isUpdateAvail() {
 	if((!isset($_SESSION['last_update_check']))
 	|| (!isset($_SESSION['last_update_result']))
 	|| (time() - $_SESSION['last_update_check'] > 3600)) {
-		$NVERSION = trim(file_get_contents("https://github.com/BorisPerc/mp3player/CURRENTVERSION.txt"));
+		$NVERSION = trim(file_get_contents("https://github.com/BorisPerc/mp3player/blob/main/CURRENTVERSION.txt"));
 		$update = version_compare($CVERSION, $NVERSION, "<");
 		$_SESSION['last_update_check'] = time();
 		$_SESSION['last_update_result'] = $update;
