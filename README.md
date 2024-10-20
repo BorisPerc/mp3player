@@ -1,4 +1,4 @@
-# B U Z Z S A W
+# A U D I O   S E R V E R
 Your private music streaming cloud  
 html multimedia server - library and player  
 
@@ -17,12 +17,6 @@ html (who'd have thought?), PHP, JS and CSS.
   - optimized for mobile devices
 
 ## Screenshots
-![Player with visualization](https://raw.githubusercontent.com/schorschii/buzzsaw/master/img/screenshot/1_player.png)
-![Library: Artists](https://raw.githubusercontent.com/schorschii/buzzsaw/master/img/screenshot/2_artists.png)
-![Library: Albums](https://raw.githubusercontent.com/schorschii/buzzsaw/master/img/screenshot/3_albums.png)
-![Library: Tracks](https://raw.githubusercontent.com/schorschii/buzzsaw/master/img/screenshot/4_tracks.png)
-![Current playlists and options](https://raw.githubusercontent.com/schorschii/buzzsaw/master/img/screenshot/5_current.png)
-
 
 # Requirements
 BUZZSAW was tested with the following software environment. Please
@@ -79,7 +73,7 @@ Enjoy your music! :-)
 
 # License
 GNU General Public License - see LICENSE.txt  
-&copy; 2017-2018 Georg Sieber - [georg-sieber.de][1]  
+&copy; 2019 AUDIO SERVER
 view source and fork me on [GitHub][2]
 
 This program is free software; you can redistribute it and/or
