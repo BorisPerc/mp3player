@@ -4,7 +4,7 @@ html multimedia server - library and player
 
 
 # About
-BUZZSAW is a web application for playing music and videos and
+Audio Server is a web application for playing music and videos and
 organizing them in a library. It is designed to listen your music
 anywhere, without syncing your mobile devices. It is written in
 html (who'd have thought?), PHP, JS and CSS.  
@@ -19,7 +19,7 @@ html (who'd have thought?), PHP, JS and CSS.
 ## Screenshots
 
 # Requirements
-BUZZSAW was tested with the following software environment. Please
+Audio Server was tested with the following software environment. Please
 note that there will be no support for other environments!
 
 ## Server
@@ -92,12 +92,12 @@ Free Software Foundation, Inc.
 59 Temple Place - Suite 330
 Boston, MA  02111-1307, USA.
 
-[1]: [https://georg-sieber.de]
-[2]: [https://github.com/schorschii/buzzsaw]
+[1]: [https://psmedia.mywire.org]
+[2]: [https://github.com/BorisPerc]
 
 # Libraries
-This program uses the [getid3()][3] library v1.9.14  
-© 2017 James Heinrich  
+This program uses the [getid3()][3] library v1.9.23  
+© 2019 James Heinrich  
 Licensed under the terms of the GPLv2
 
 [3]: [http://getid3.sourceforge.net]
