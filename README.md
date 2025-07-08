@@ -45,7 +45,7 @@ note that there will be no support for other environments!
 # Installation
 
 ## Upgrade from old version
-1. Delete all files from the buzzsaw directory, except: "database.php", "music" and "music_thumb" directory.
+1. Delete all files from the audio directory, except: "database.php", "music" and "music_thumb" directory.
 2. Copy all files from this archive to your buzzsaw directory, again except "database.php", "music" and "music_thumb" directory.
 3. That's it. If you encounter some problems, clear your browser cache and/or execute file scan again (Menu -> "Options" -> "Scan filesystem").
 
@@ -65,7 +65,7 @@ note that there will be no support for other environments!
 2. Copy all files from this archive into your webserver root directory.
 3. Edit the database.php file and enter your mysql database credentials.
 4. Grant write access for the web server user www-data to the "music" and "music_thumb" directory.
-5. Open the buzzaw directory in your browser. It should ask you to execute the database setup. Click the button to start the setup. After the setup finished, log in leaving the password box empty.
+5. Open the audio directory in your browser. It should ask you to execute the database setup. Click the button to start the setup. After the setup finished, log in leaving the password box empty.
 6. Place all your music files into the "music" directory. Go to Menu -> "Options" -> "Scan filesystem". You can play your music without scanning by using the "files" tab inside the menu.
 
 Enjoy your music! :-)
@@ -137,8 +137,8 @@ Setup database.php and visit your url of app
 
   scan.php
 
-  line 34 example put your music disk Windows
+  line 34 example put your music disk Windows example:
 
-  $MUSIC_DIR = "D:/Audio mp3/";
+  $MUSIC_DIR = "D:/Audio mp3/\";
 
   
