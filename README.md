@@ -138,7 +138,7 @@ Setup database.php and visit your url of app
   scan.php
 
   line 34 example put your music disk Windows example:
-
+```
   $MUSIC_DIR = "D:/Audio mp3/\"; 
-
+```
   
