@@ -61,6 +61,10 @@ note that there will be no support for other environments!
    ```bash
    apt-get install apache2 php php-mysql libapache2-mod-php mysql-server
    ```
+   or with PHP7.4 on Debian 11/12 - Ubuntu24-Server
+   ```bash
+   apt-get install apache2 php7.4 php7.4-mysql libapache2-mod-php7.4 mariadb-server
+   ```
 
 2. Copy all files from this archive into your webserver root directory.
 3. Edit the database.php file and enter your mysql database credentials.
@@ -96,7 +100,7 @@ Boston, MA  02111-1307, USA.
 [2]: [https://github.com/BorisPerc]
 
 # Libraries
-This program uses the [getid3()][3] library v1.9.23  
+This program uses the [getid3()][3] library v1.9.21 released Sep 22, 2021  
 © 2019 James Heinrich  
 Licensed under the terms of the GPLv2
 
