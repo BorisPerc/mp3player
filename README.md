@@ -100,7 +100,7 @@ Boston, MA  02111-1307, USA.
 [2]: [https://github.com/BorisPerc]
 
 # Libraries
-This program uses the [getid3()][3] library v1.9.21 released Sep 22, 2021  
+This program uses the [getid3()][3] library 1.9.23: [2023-10-19] James Heinrich :: 1.9.23-202310190849
 © 2019 James Heinrich  
 Licensed under the terms of the GPLv2
 
