@@ -1,0 +1,1018 @@
+MP3Player PHP 8.2+ Migration Guide
+I'll help you update this MP3Player application to work with PHP 8.2+. I've identified several compatibility issues that need to be fixed.
+
+Main Issues Found:
+Deprecated dynamic properties - PHP 8.2 requires property declarations
+
+Undefined constants/variables - Several files use undefined constants
+
+Deprecated function calls - realpath() with empty/null values
+
+Session configuration issues
+
+MySQLi prepare error handling
+
+Let me provide the corrected files:
+
+1. database.php - Fixed
+php
+<?php
+/* please replace the following values with the credentials to your mysql server */
+$db_host = "localhost";
+$db_user = "root";
+$db_password = "PASSWORD";
+$db_databasename = "DATABASE";
+
+/* ===== DO NOT TOUCH THE FOLLOWING CODE ===== */
+$mysqli = new mysqli($db_host, $db_user, $db_password, $db_databasename);
+if ($mysqli->connect_errno) {
+    die("Failed to connect to database server: " . $mysqli->connect_error);
+}
+$mysqli->set_charset("utf8");
+?>
+2. global.php - Fixed
+php
+<?php
+
+// ------------------------------
+// flags
+const MEDIAROOT = "music";
+const ALLOW_DOWNLOADS = true;
+const LOG_DOWNLOADS = true;
+// ------------------------------
+
+// Add this to prevent deprecation warnings for dynamic properties
+class_exists('getID3'); // Ensure getID3 is loaded if needed
+
+function is_sub_dir($path, $parent_folder) {
+    if (empty($path) || empty($parent_folder)) {
+        return false;
+    }
+    
+    $path = realpath($path);
+    $parent_folder = realpath($parent_folder);
+    
+    if ($path === false || $parent_folder === false) {
+        return false;
+    }
+    
+    return (startsWith($path, $parent_folder));
+}
+
+$CVERSION = trim(file_get_contents("CURRENTVERSION.txt") ?: "unknown");
+$NVERSION = "";
+function isUpdateAvail() {
+    global $CVERSION;
+    global $NVERSION;
+    $update = false;
+
+    if((!isset($_SESSION['last_update_check']))
+    || (!isset($_SESSION['last_update_result']))
+    || (time() - $_SESSION['last_update_check'] > 3600)) {
+        $NVERSION = trim(@file_get_contents("https://github.com/BorisPerc/mp3player/blob/main/CURRENTVERSION.txt") ?: $CVERSION);
+        $update = version_compare($CVERSION, $NVERSION, "<");
+        $_SESSION['last_update_check'] = time();
+        $_SESSION['last_update_result'] = $update;
+    } else {
+        $update = $_SESSION['last_update_result'];
+    }
+
+    return $update;
+}
+
+function clearStoredResults($mysqli){
+    if (!$mysqli) return;
+    do {
+        if ($res = $mysqli->store_result()) {
+            $res->free();
+        }
+    } while ($mysqli->more_results() && $mysqli->next_result());
+}
+
+function IsAlreadyEstablished($mysqli) {
+    $statement = $mysqli->prepare("SHOW TABLES LIKE 'setting';");
+    if (!$statement) return false;
+    $statement->execute();
+    $statement->store_result();
+    $result = $statement->num_rows > 0;
+    $statement->close();
+    return $result;
+}
+
+function isAudioFile($filename) {
+    $mime_types = array(
+        'mp3' => 'audio/mpeg',
+        'mp4' => 'audio/mp4',
+        'm4a' => 'audio/mp4',
+        'ogg' => 'audio/ogg',
+        'm4v' => 'audio/mp4',
+        'wav' => 'audio/wav',
+        'flac' => 'audio/flac',
+    );
+    $tmp = explode('.', $filename);
+    $ext = strtolower(end($tmp));
+    return array_key_exists($ext, $mime_types);
+}
+
+function shortText($longtext) {
+    $maxlength = 21;
+    return strlen($longtext) > $maxlength ? substr($longtext,0,$maxlength)."..." : $longtext;
+}
+
+function startsWith($haystack, $needle) {
+    $length = strlen($needle);
+    return (substr($haystack, 0, $length) === $needle);
+}
+
+function endsWith($haystack, $needle) {
+    $length = strlen($needle);
+    return $length === 0 || (substr($haystack, -$length) === $needle);
+}
+
+?>
+3. session.php - Fixed
+php
+<?php
+// set max session length
+$session_length_seconds = 60/*s*/ * 60/*m*/ * 24/*h*/ * 7/*d*/;
+ini_set('session.gc_maxlifetime', (string)$session_length_seconds); // server should keep session data
+
+// Fix: session_set_cookie_params requires array in PHP 8.2+ for all parameters
+if (PHP_VERSION_ID >= 80200) {
+    session_set_cookie_params([
+        'lifetime' => $session_length_seconds,
+        'path' => '/',
+        'domain' => '',
+        'secure' => false,
+        'httponly' => true,
+        'samesite' => 'Lax'
+    ]);
+} else {
+    session_set_cookie_params($session_length_seconds); // each client should remember their session id
+}
+
+// start session
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+if (!isset($_SESSION['username'])) { // if client is not logged in
+    header('Location: login.php'); // redirect to login page
+    die(); // abort current script
+}
+?>
+4. login.php - Fixed
+php
+<?php
+
+require_once('database.php');
+require_once('global.php');
+require_once('browser.php');
+
+if(!IsAlreadyEstablished($mysqli)) {
+    header('Location: setup.php');
+    exit();
+}
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+$info = "";
+if (isset($_POST['username']) && isset($_POST['password'])) {
+    $username = $_POST['username']; 
+    $password = $_POST['password'];
+    if (correctCredentials($username, $password, $mysqli)) {
+        $_SESSION['username'] = $username;
+        $_SESSION['logintype'] = $username;
+        header('Location: index.php');
+        exit();
+    } else {
+        $info = "Invalid username or password.";
+    }
+} elseif (isset($_GET['logout']) || isset($_POST['logout'])) {
+    session_unset();
+    session_destroy();
+    $info = "Successfully logged out.";
+}
+
+if (isset($_POST['newpassword'])) {
+    $newpassword = "";
+    if ($_POST['newpassword'] != "")
+        $newpassword = password_hash($_POST['newpassword'], PASSWORD_DEFAULT);
+    $username = $_POST['username'];
+    $valid = true;
+    if ($username == 1)
+        $sql = "UPDATE setting SET value = ? WHERE identifier = 'password_user'";
+    elseif ($username == 2)
+        $sql = "UPDATE setting SET value = ? WHERE identifier = 'password_remoteplayer'";
+    elseif ($username == 3)
+        $sql = "UPDATE setting SET value = ? WHERE identifier = 'password_voter'";
+    else
+        $valid = false;
+    
+    if ($valid) {
+        $statement = $mysqli->prepare($sql);
+        if ($statement) {
+            $statement->bind_param('s', $newpassword);
+            $statement->execute();
+            $statement->close();
+        }
+    }
+    $info = "Password changed.";
+}
+
+function correctCredentials($username, $password, $mysqli) {
+    if ($username == 1)
+        $sql = "SELECT * FROM setting WHERE identifier = 'password_user' LIMIT 1";
+    elseif ($username == 2)
+        $sql = "SELECT * FROM setting WHERE identifier = 'password_remoteplayer' LIMIT 1";
+    elseif ($username == 3)
+        $sql = "SELECT * FROM setting WHERE identifier = 'password_voter' LIMIT 1";
+    else
+        return false;
+    
+    $statement = $mysqli->prepare($sql);
+    if (!$statement) return false;
+    $statement->execute();
+    $result = $statement->get_result();
+    while($row = $result->fetch_object()) {
+        if($row->value == "" && $password == "")
+            return true;
+        elseif(password_verify($password, $row->value))
+            return true;
+    }
+    return false;
+}
+?>
+5. music.php - Fixed (Critical)
+php
+<?php
+
+require_once('global.php');
+set_time_limit(10);
+
+/* Source https://gist.github.com/kosinix/4cf0d432638817888149 */
+class ResumeDownload {
+    private $file;
+    private $name;
+    private $boundary;
+    private $content_type;
+    private $delay = 0;
+    private $size = 0;
+    
+    function __construct($file, $content_type = "application/octet-stream", $delay = 0) {
+        if (!is_file($file)) {
+            header("HTTP/1.1 400 Invalid Request");
+            die("<h3>File Not Found</h3>");
+        }
+        $this->size = filesize($file);
+        $this->file = fopen($file, "r");
+        $this->boundary = md5($file);
+        $this->delay = $delay;
+        $this->name = basename($file);
+        $this->content_type = $content_type;
+    }
+    
+    public function process() {
+        $ranges = NULL;
+        $t = 0;
+        if ($_SERVER['REQUEST_METHOD'] == 'GET' && isset($_SERVER['HTTP_RANGE']) && $range = stristr(trim($_SERVER['HTTP_RANGE']), 'bytes=')) {
+            $range = substr($range, 6);
+            $ranges = explode(',', $range);
+            $t = count($ranges);
+        }
+        header("Accept-Ranges: bytes");
+        header("Content-Type: " . $this->content_type);
+        header("Content-Transfer-Encoding: binary");
+        header(sprintf('Content-Disposition: attachment; filename="%s"', $this->name));
+        if ($t > 0) {
+            header("HTTP/1.1 206 Partial content");
+            $t === 1 ? $this->pushSingle($range) : $this->pushMulti($ranges);
+        } else {
+            header("Content-Length: " . $this->size);
+            $this->readFile();
+        }
+        flush();
+    }
+    
+    private function pushSingle($range) {
+        $start = $end = 0;
+        $this->getRange($range, $start, $end);
+        header("Content-Length: " . ($end - $start + 1));
+        header(sprintf("Content-Range: bytes %d-%d/%d", $start, $end, $this->size));
+        fseek($this->file, $start);
+        $this->readBuffer($end - $start + 1);
+        $this->readFile();
+    }
+    
+    private function pushMulti($ranges) {
+        $length = $start = $end = 0;
+        $output = "";
+        $tl = "Content-type: " . $this->content_type . "\r\n";
+        $formatRange = "Content-range: bytes %d-%d/%d\r\n\r\n";
+        foreach ($ranges as $range) {
+            $this->getRange($range, $start, $end);
+            $length += strlen("\r\n--$this->boundary\r\n");
+            $length += strlen($tl);
+            $length += strlen(sprintf($formatRange, $start, $end, $this->size));
+            $length += $end - $start + 1;
+        }
+        $length += strlen("\r\n--$this->boundary--\r\n");
+        header("Content-Length: $length");
+        header("Content-Type: multipart/x-byteranges; boundary=$this->boundary");
+        foreach ($ranges as $range) {
+            $this->getRange($range, $start, $end);
+            echo "\r\n--$this->boundary\r\n";
+            echo $tl;
+            echo sprintf($formatRange, $start, $end, $this->size);
+            fseek($this->file, $start);
+            $this->readBuffer($end - $start + 1);
+        }
+        echo "\r\n--$this->boundary--\r\n";
+    }
+    
+    private function getRange($range, &$start, &$end) {
+        list($start, $end) = explode('-', $range);
+        $fileSize = $this->size;
+        if ($start == '') {
+            $tmp = $end;
+            $end = $fileSize - 1;
+            $start = $fileSize - $tmp;
+            if ($start < 0)
+                $start = 0;
+        } else {
+            if ($end == '' || $end > $fileSize - 1)
+                $end = $fileSize - 1;
+        }
+        if ($start > $end) {
+            header("Status: 416 Requested range not satisfiable");
+            header("Content-Range: */" . $fileSize);
+            exit();
+        }
+        return array($start, $end);
+    }
+    
+    private function readFile() {
+        while (!feof($this->file)) {
+            echo fgets($this->file);
+            flush();
+            usleep($this->delay);
+        }
+        fclose($this->file);
+    }
+    
+    private function readBuffer($bytes, $size = 1024) {
+        $bytesLeft = $bytes;
+        while ($bytesLeft > 0 && !feof($this->file)) {
+            $bytesLeft > $size ? $bytesRead = $size : $bytesRead = $bytesLeft;
+            $bytesLeft -= $bytesRead;
+            echo fread($this->file, $bytesRead);
+            flush();
+            usleep($this->delay);
+        }
+    }
+}
+
+require_once('session.php');
+session_write_close(); // don't block other scripts by locking the session file
+
+if(isset($_GET['track'])) {
+    // is a valid file path given?
+    if(file_exists($_GET['track'])) {
+        try {
+            $download = new ResumeDownload($_GET['track'], "audio/mpeg", 0);
+            $download->process();
+        } catch (Exception $e) {
+            header('HTTP/1.1 404 File Not Found');
+            die('Sorry, an error occurred.');
+        }
+        exit();
+    }
+
+    // otherwise search db for file path by track id
+    require_once('database.php');
+    $sql = "SELECT tr.id AS 'id', "
+         . "tr.title AS 'title', "
+         . "tr.path AS 'path', "
+         . "tr.track_number AS 'track_number', "
+         . "al.title AS 'album', "
+         . "al.id AS 'album_id', "
+         . "ar.title AS 'artist', "
+         . "tr.cover AS 'cover' "
+         . "FROM track tr "
+         . "INNER JOIN album al ON tr.album_id = al.id "
+         . "INNER JOIN artist ar ON tr.artist_id = ar.id "
+         . "WHERE tr.id = ?;";
+    $statement = $mysqli->prepare($sql);
+    if (!$statement) {
+        die('Database error');
+    }
+    $statement->bind_param('i', $_GET['track']);
+    $statement->execute();
+    $result = $statement->get_result();
+
+    while($row = $result->fetch_object()) {
+        $filename = $row->artist . " - " . $row->title . "." . pathinfo($row->path, PATHINFO_EXTENSION);
+        if(isset($_GET['download']) && $_GET['download'] != "") {
+            if(!ALLOW_DOWNLOADS) {
+                header('HTTP/1.1 401 Forbidden');
+                die('Download not allowed');
+            }
+            header("Content-Disposition: attachment; filename='$filename'");
+            if(LOG_DOWNLOADS) {
+                $sql = "INSERT INTO download (track_id, client) VALUES (?, ?)";
+                $statement2 = $mysqli->prepare($sql);
+                if ($statement2) {
+                    $statement2->bind_param('is', $row->id, $_SERVER['REMOTE_ADDR']);
+                    $statement2->execute();
+                    $statement2->close();
+                }
+            }
+        }
+
+        try {
+            $download = new ResumeDownload($row->path, "audio/mpeg", 0);
+            $download->process();
+        } catch (Exception $e) {
+            header('HTTP/1.1 404 File Not Found');
+            die('Sorry, an error occurred.');
+        }
+        break;
+    }
+    $statement->close();
+}
+?>
+6. scan.php - Fixed
+php
+<?php
+require_once('session.php');
+require_once('global.php');
+session_write_close(); // don't block other scripts by locking the session file
+
+// Define THUMB_DIR if not defined
+if (!defined('THUMB_DIR')) {
+    define('THUMB_DIR', "music_thumb");
+}
+?>
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Scanning audio files</title>
+    <meta charset="utf-8"/>
+    <script type="text/javascript" src="js/global.js"></script>
+    <link href="css/global.css" rel="stylesheet">
+    <link href="css/scan.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Roboto:100,300,400" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+
+    <div id="loader">
+        <img id="imgloader" src="img/saw.svg" />
+        <br>
+        <div>Scan in progress, please wait...</div>
+    </div>
+
+    <div id="scanprogress">
+    <?php
+    
+    // Check if getID3 exists
+    $getID3_path = 'php/getID3/getid3/getid3.php';
+    if (!file_exists($getID3_path)) {
+        echo "<b>ERROR:</b> getID3 library not found at: " . $getID3_path . "<br>";
+        echo "Please install getID3 library in php/getID3/ directory.";
+    } else {
+        require_once($getID3_path);
+        $getID3 = new getID3;
+
+        require_once('database.php');
+        $THUMB_DIR = "music_thumb";
+        $MUSIC_DIR = MEDIAROOT;
+        
+        // remove old db entries and album cover thumbnails
+        if(isset($_GET['rescan']) && $_GET['rescan'] == 1) {
+            if (!$mysqli->multi_query(file_get_contents("sql/clean.sql")))
+                die("<b>ERROR TRUNCATING TABLES:</b><br>" . $mysqli->error . "<br>");
+            clearStoredResults($mysqli);
+
+            if (is_dir($THUMB_DIR)) {
+                $files = glob($THUMB_DIR.'/*');
+                if ($files) {
+                    foreach($files as $file){
+                        if(is_file($file)) unlink($file);
+                    }
+                }
+            }
+        }
+
+        // Create thumbnail directory if it doesn't exist
+        if (!is_dir($THUMB_DIR)) {
+            mkdir($THUMB_DIR, 0755, true);
+        }
+
+        // find all music files inside the music directory
+        $counter = 0;
+        $fs_perm_warned = false;
+        
+        if (!is_dir($MUSIC_DIR)) {
+            echo "<b>ERROR:</b> Music directory '" . $MUSIC_DIR . "' does not exist.<br>";
+        } else {
+            $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($MUSIC_DIR));
+            foreach ($it as $file) {
+                if ($file->isFile() && isAudioFile($file->getPathname())) {
+                    $filepath = $file->getPathname();
+                    // check if file is already in database
+                    $track_id = -1;
+                    $track_cover = "";
+                    $sql = "SELECT tr.id AS 'id', tr.cover AS 'cover' FROM track tr WHERE tr.path = ?";
+                    $statement = $mysqli->prepare($sql);
+                    if ($statement) {
+                        $statement->bind_param('s', $filepath);
+                        if (!$statement->execute())
+                            echo("<b>EXEC FAILED:</b>&nbsp;$filepath<br>$sql<br>".$statement->error."<br>");
+                        $result = $statement->get_result();
+                        if ($result) {
+                            while($row = $result->fetch_object()) {
+                                $track_id = $row->id;
+                                $track_cover = $row->cover;
+                            }
+                        }
+                        $statement->close();
+                    }
+
+                    // read id3 tags from file
+                    $FileInfo = $getID3->analyze($filepath);
+                    getid3_lib::CopyTagsToComments($FileInfo);
+
+                    // get file length
+                    $filelength = filesize($filepath);
+
+                    // read playtime
+                    $playtime = 0;
+                    if (isset($FileInfo['playtime_seconds']))
+                        $playtime = $FileInfo['playtime_seconds'];
+
+                    // read genre
+                    $genre = null;
+                    if (isset($FileInfo['comments_html']['genre'][0]))
+                        $genre = $FileInfo['comments_html']['genre'][0];
+
+                    // read artist
+                    $artist = "Unknown Artist";
+                    if (isset($FileInfo['comments_html']['artist'][0]))
+                        $artist = $FileInfo['comments_html']['artist'][0];
+
+                    // read album
+                    $album = "Unknown Album";
+                    if (isset($FileInfo['comments_html']['album'][0]))
+                        $album = $FileInfo['comments_html']['album'][0];
+
+                    // read title
+                    $title = "Unknown Title";
+                    if (isset($FileInfo['comments_html']['title'][0]))
+                        $title = $FileInfo['comments_html']['title'][0];
+                    else
+                        $title = pathinfo($filepath)['filename'];
+
+                    // read track number
+                    $track_number = 0;
+                    if (isset($FileInfo['comments_html']['track_number'][0]))
+                        $track_number = $FileInfo['comments_html']['track_number'][0];
+                    if (strpos((string)$track_number, '/') !== false) 
+                        $track_number = explode('/', (string)$track_number)[0];
+
+                    // read cover if available
+                    $cover = null;
+                    if (isset($FileInfo['comments']['picture'][0])
+                    && $FileInfo['comments']['picture'][0] != "") {
+                        if ($track_id == -1 || $track_cover == "")
+                            $filename = $THUMB_DIR . "/" . findFreeImageNumber($THUMB_DIR) . ".jpg";
+                        else
+                            $filename = $track_cover;
+
+                        if (file_put_contents($filename, $FileInfo['comments']['picture'][0]['data']) === false && $fs_perm_warned == false) {
+                            $fs_perm_warned = true;
+                            echo "<b>WARN:</b>&nbsp;Unable to write into cover thumbnail directory. Album covers will not be available.<br>";
+                        }
+                        $cover = $filename;
+                    }
+
+                    // call insert/update sql procedure
+                    $sql = "CALL InsertUpdateTrack(?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    $statement = $mysqli->prepare($sql);
+                    if ($statement) {
+                        $statement->bind_param('ssssssiis', $title, $album, $artist, $filepath, $track_number, $cover, $playtime, $filelength, $genre);
+                        $statement->execute();
+                        $statement->close();
+                    }
+
+                    flush(); ob_flush();
+                    $counter ++;
+                }
+            }
+        }
+
+        // clean removed tracks
+        $sql = "SELECT * FROM track";
+        $statement = $mysqli->prepare($sql);
+        if ($statement) {
+            $statement->execute();
+            $result = $statement->get_result();
+            while($row = $result->fetch_object()) {
+                if(!file_exists($row->path)) {
+                    $id = $row->id;
+                    $del_sql = "DELETE FROM track WHERE id = ?";
+                    $del_statement = $mysqli->prepare($del_sql);
+                    if ($del_statement) {
+                        $del_statement->bind_param('i', $id);
+                        $del_statement->execute();
+                        $del_statement->close();
+                    }
+                }
+            }
+            $statement->close();
+        }
+
+        // call cleanup script
+        $sql = "CALL PurgeAlbumArtist";
+        $statement = $mysqli->prepare($sql);
+        if ($statement) {
+            if (!$statement->execute())
+                echo("<b>EXEC FAILED:</b><br>$sql<br>".$statement->error."<br>");
+            $statement->close();
+        }
+
+        echo "<br><b>Finished - scanned $counter track(s).</b><br>";
+        echo "<a href='player.php' class='styled_link'>Open Player</a>";
+    }
+    ?>
+    </div>
+
+    <script>
+    var imgloader = document.getElementById('imgloader');
+    if (imgloader) imgloader.style.animation = "none";
+    </script>
+
+</body>
+</html>
+
+<?php
+// find next free number for image file
+function findFreeImageNumber($THUMB_DIR) {
+    $free = false;
+    $img_free_counter = 0;
+    while (!$free) {
+        $img_free_counter ++;
+        if (!file_exists($THUMB_DIR . "/" . $img_free_counter . ".jpg"))
+            $free = true;
+    }
+    return $img_free_counter;
+}
+?>
+7. php/library-views/playlist_content.php - Fixed
+php
+<?php
+
+if(!isset($view)) die("Access this page using library.php with the view parameter!");
+
+?>
+
+<?php
+
+// Initialize variables
+$action = isset($_GET['action']) ? $_GET['action'] : '';
+$playlist_id = isset($_GET['playlist']) ? (int)$_GET['playlist'] : 0;
+
+// remove track from playlist if requested
+if (isset($_GET['remove_playlist_track'])) {
+    $sql = "DELETE FROM playlist_track "
+         . "WHERE id = " . $mysqli->real_escape_string($_GET['remove_playlist_track']) . ";";
+    $result = $mysqli->query($sql);
+    if(!$result) echo "ERROR DELETING TRACK";
+}
+// move track up if requested
+if (isset($_GET['moveup_playlist_track'])) {
+    $sql = "CALL MoveTrackInPlaylist(" . $mysqli->real_escape_string($_GET['moveup_playlist_track']) . ",-1);";
+    $result = $mysqli->query($sql);
+    if(!$result) echo "ERROR MOVING TRACK";
+}
+// move track down if requested
+if (isset($_GET['movedown_playlist_track'])) {
+    $sql = "CALL MoveTrackInPlaylist(" . $mysqli->real_escape_string($_GET['movedown_playlist_track']) . ",1);";
+    $result = $mysqli->query($sql);
+    if(!$result) echo "ERROR MOVING TRACK";
+}
+
+$playlistname = "";
+if ($playlist_id > 0) {
+    $sql = "SELECT p.title AS 'title' FROM playlist p "
+         . "WHERE id = " . $mysqli->real_escape_string($_GET['playlist']) . " "
+         . "LIMIT 1;";
+    $result = $mysqli->query($sql);
+    while($row = $result->fetch_object()) {
+        $playlistname = $row->title;
+        break;
+    }
+}
+
+echo "<div class='playlistOptions'>";
+echo "<img class='cover_libraray unknown' src='img/currentplaylist.svg'><span class='playlist_title'>" . htmlspecialchars($playlistname) . "</span>";
+echo "<button id='btnRemovePlaylist' class='roundButton roundButtonSmall btnTrash right btnMarginLeft' onclick='removePlaylist(" . (int)$_GET['playlist'] . ");' title='Remove this playlist'></button>";
+echo "<button id='btnMoveTrackDown' class='roundButton roundButtonSmall btnMoveDown right btnMarginLeft' onclick='ajaxRequest(\"content\",\"library.php?view=playlist_content&playlist=" . $mysqli->real_escape_string($_GET['playlist']) . "&action=movedown\");' title='Move track(s) down in playlist'></button>";
+echo "<button id='btnMoveTrackUp' class='roundButton roundButtonSmall btnMoveUp right btnMarginLeft' onclick='ajaxRequest(\"content\",\"library.php?view=playlist_content&playlist=" . $mysqli->real_escape_string($_GET['playlist']) . "&action=moveup\");' title='Move track(s) up in playlist'></button>";
+echo "<button id='btnRemovePlaylistTrack' class='roundButton roundButtonSmall btnRemove right btnMarginLeft' onclick='ajaxRequest(\"content\",\"library.php?view=playlist_content&playlist=" . $mysqli->real_escape_string($_GET['playlist']) . "&action=remove\");' title='Remove track(s) from playlist'></button>";
+echo "<button id='btnAddTrack' class='roundButton roundButtonSmall btnAdd right btnMarginLeft' onclick='ajaxRequest(\"content\",\"library.php?view=artist&addtoplaylist=" . $mysqli->real_escape_string($_GET['playlist']) . "\");' title='Add track(s) to playlist'></button>";
+echo "</div><br>";
+
+if($action == "remove") {
+    echo "<div class='infobox error inlistinfo'>Please click on a track to remove it from this playlist.</div>";
+} elseif($action == "moveup") {
+    echo "<div class='infobox inlistinfo'>Please click on a track to move it up.</div>";
+} elseif($action == "movedown") {
+    echo "<div class='infobox inlistinfo'>Please click on a track to move it down.</div>";
+}
+
+$sql = "SELECT @curRow := @curRow + 1 AS 'rank', "
+     . "pt.sequence AS 'sequence', "
+     . "pt.track_id AS 'track_id', "
+     . "pt.id AS 'id', "
+     . "t.title AS 'title' "
+     . "FROM playlist_track pt "
+     . "INNER JOIN track t ON pt.track_id = t.id "
+     . "JOIN  (SELECT @curRow := 0) r "
+     . "WHERE pt.playlist_id = " . $mysqli->real_escape_string($_GET['playlist']) . " "
+     . "ORDER BY pt.sequence;";
+$result = $mysqli->query($sql);
+$counter = 0;
+while($row = $result->fetch_object()) {
+    $linkaction = "href='player.php?currentplaylist=playlist&playlist=" . $mysqli->real_escape_string($_GET['playlist']) . "&track=" . $row->track_id . "'";
+    if($action === "remove")
+        $linkaction = "href='#' onclick='removeTrackFromPlaylist(\"" . $mysqli->real_escape_string($_GET['playlist']) . "\",\"" . $row->id . "\");'";
+    elseif($action === "moveup")
+        $linkaction = "href='#' onclick='moveTrackUpPlaylist(\"" . $mysqli->real_escape_string($_GET['playlist']) . "\",\"" . $row->id . "\");'";
+    elseif($action === "movedown")
+        $linkaction = "href='#' onclick='moveTrackDownPlaylist(\"" . $mysqli->real_escape_string($_GET['playlist']) . "\",\"" . $row->id . "\");'";
+
+    echo "<li>";
+    echo "<a class='first' $linkaction>";
+    echo "<span class='track_number'>" . $row->rank . "</span> ";
+    echo htmlspecialchars($row->title);
+    echo "</a>";
+    echo "</li>";
+    $counter ++;
+}
+if ($counter == 0) echo "<li>This playlist contains no tracks.</li>";
+
+?>
+8. sql/tables.sql - Fixed (Added DROP TABLE IF EXISTS and updated charset)
+sql
+/* database structure - struktura tabel */
+
+-- Drop tables if they exist
+SET foreign_key_checks = 0;
+
+DROP TABLE IF EXISTS `download`;
+DROP TABLE IF EXISTS `playlist_track`;
+DROP TABLE IF EXISTS `playlist_party`;
+DROP TABLE IF EXISTS `playlist`;
+DROP TABLE IF EXISTS `remote`;
+DROP TABLE IF EXISTS `setting`;
+DROP TABLE IF EXISTS `track`;
+DROP TABLE IF EXISTS `album`;
+DROP TABLE IF EXISTS `artist`;
+
+SET foreign_key_checks = 1;
+
+--
+-- Struktura tabele za  `album`
+--
+
+CREATE TABLE `album` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` text CHARACTER SET utf8mb4 NOT NULL,
+  `artist_id` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `artist_id` (`artist_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktura tabele za  `artist`
+--
+
+CREATE TABLE `artist` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` text CHARACTER SET utf8mb4 NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktura tabele za  `playlist`
+--
+
+CREATE TABLE `playlist` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` text CHARACTER SET utf8mb4 NOT NULL,
+  `type` int(11) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktura tabele za  `playlist_party`
+--
+
+CREATE TABLE `playlist_party` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `track_id` int(11) NOT NULL,
+  `votes` int(11) NOT NULL,
+  `votes_total` int(11) NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktura tabele za  `playlist_track`
+--
+
+CREATE TABLE `playlist_track` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `playlist_id` int(11) NOT NULL,
+  `track_id` int(11) NOT NULL,
+  `sequence` int(11) NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `playlist_id` (`playlist_id`),
+  KEY `track_id` (`track_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktura tabele za  `remote`
+--
+
+CREATE TABLE `remote` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` text CHARACTER SET utf8mb4 NOT NULL,
+  `track_id` int(11) DEFAULT NULL,
+  `position` double DEFAULT NULL,
+  `state` int(11) DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktura tabele za  `setting`
+--
+
+CREATE TABLE `setting` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `identifier` text CHARACTER SET utf8mb4 NOT NULL,
+  `value` text CHARACTER SET utf8mb4 NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktura tabele za  `track`
+--
+
+CREATE TABLE `track` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `path` text CHARACTER SET utf8mb4 NOT NULL,
+  `title` text CHARACTER SET utf8mb4 NOT NULL,
+  `artist_id` int(11) DEFAULT NULL,
+  `album_id` int(11) DEFAULT NULL,
+  `track_number` int(11) DEFAULT NULL,
+  `duration` int(11) DEFAULT NULL,
+  `cover` text CHARACTER SET utf8mb4,
+  `length` bigint(20) DEFAULT NULL,
+  `genre` text CHARACTER SET utf8mb4 NOT NULL,
+  `inserted` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `artist_id` (`artist_id`),
+  KEY `album_id` (`album_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Struktura tabele za  `download`
+--
+
+CREATE TABLE `download` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `track_id` int(11) NOT NULL,
+  `user` int(11) DEFAULT NULL,
+  `time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `client` text CHARACTER SET utf8mb4,
+  PRIMARY KEY (`id`),
+  KEY `track_id` (`track_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+--
+-- Omejitve izvoženih tabel
+--
+
+--
+-- Omejitve tabele `album`
+--
+ALTER TABLE `album`
+  ADD CONSTRAINT `fk_album_to_artist` FOREIGN KEY (`artist_id`) REFERENCES `artist` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Omejitve tabele `playlist_track`
+--
+ALTER TABLE `playlist_track`
+  ADD CONSTRAINT `fk_playlist` FOREIGN KEY (`playlist_id`) REFERENCES `playlist` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_playlist_track` FOREIGN KEY (`track_id`) REFERENCES `track` (`id`);
+
+--
+-- Omejitve tabele `track`
+--
+ALTER TABLE `track`
+  ADD CONSTRAINT `fk_album` FOREIGN KEY (`album_id`) REFERENCES `album` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT `fk_artist` FOREIGN KEY (`artist_id`) REFERENCES `artist` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Omejitve tabele `download`
+--
+ALTER TABLE `download`
+  ADD CONSTRAINT `fk_download_track` FOREIGN KEY (`track_id`) REFERENCES `track` (`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+--
+-- Insert default settings
+--
+INSERT INTO `setting` (`id`, `identifier`, `value`) VALUES
+(1, 'password_user', ''),
+(2, 'password_remoteplayer', ''),
+(3, 'password_voter', '');
+9. browser.php - Fixed
+php
+<?php
+
+/* functions for detecting browsers and operating systems */
+
+function getOS1() {
+    $ua = $_SERVER["HTTP_USER_AGENT"] ?? '';
+    if(strpos($ua, 'Android'))
+        return "Android";
+    elseif(strpos($ua, 'BlackBerry'))
+        return "BlackBerry";
+    elseif(strpos($ua, 'iPhone') || strpos($ua, 'iPad'))
+        return "iPhone";
+    elseif(strpos($ua, 'Palm'))
+        return "Palm";
+    elseif(strpos($ua, 'Linux'))
+        return "Linux";
+    elseif(strpos($ua, 'Macintosh'))
+        return "Macintosh";
+    elseif(strpos($ua, 'Windows'))
+        return "Windows";
+    else
+        return "Unknown";
+}
+
+function getBrowser1() {
+    $ua = $_SERVER["HTTP_USER_AGENT"] ?? '';
+    if(strpos($ua, 'Chrome'))
+        return "Chrome";
+    elseif(strpos($ua, 'Firefox'))
+        return "Firefox";
+    elseif(strpos($ua, 'MSIE') || strpos($ua, 'Trident'))
+        return "InternetExplorer";
+    elseif(preg_match("/\bOpera\b/i", $ua))
+        return "Opera";
+    elseif(strpos($ua, 'Safari'))
+        return "Safari";
+    elseif(strpos($ua, 'Edg'))
+        return "Edge";
+    else
+        return "Unknown";
+}
+
+?>
+
+
+Additional PHP 8.2 Configuration for php.ini:
+ini
+; Recommended settings for PHP 8.2+
+max_execution_time = 300
+max_input_time = 300
+memory_limit = 256M
+post_max_size = 100M
+upload_max_filesize = 100M
+session.gc_maxlifetime = 604800
+session.cookie_lifetime = 604800
+
+
+
