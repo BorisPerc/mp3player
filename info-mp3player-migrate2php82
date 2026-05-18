@@ -1451,3 +1451,544 @@ echo "<script>showStats('" . addslashes($stats_html) . "');</script>";
 </div>
 </body>
 </html>
+
+
+
+
+FOR CUSTOM DIR scan.php
+<?php
+// scan.php - Supports custom absolute paths like i:\Music\relax\
+
+require_once('global.php');
+
+// Start output buffering for real-time progress
+ob_implicit_flush(true);
+ob_end_flush();
+
+// Set max execution time to 10 minutes for large libraries
+set_time_limit(600);
+
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MP3Player - Scanning Audio Files</title>
+    <meta charset="utf-8"/>
+    <link href="css/global.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            padding: 20px;
+            margin: 0;
+        }
+        .scanner-container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #2a2a2a;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        h1 { color: #ff6b35; margin-top: 0; font-size: 24px; }
+        .log-box {
+            background: #0d0d0d;
+            border: 1px solid #3a3a3a;
+            border-radius: 5px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .log-entry { margin: 2px 0; font-family: monospace; }
+        .success { color: #44ff44; }
+        .error { color: #ff4444; }
+        .info { color: #44aaff; }
+        .warning { color: #ffaa44; }
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #3a3a3a;
+            border-radius: 2px;
+            margin: 15px 0;
+            overflow: hidden;
+        }
+        .progress-fill {
+            width: 0%;
+            height: 100%;
+            background: #ff6b35;
+            transition: width 0.3s ease;
+        }
+        .button {
+            display: inline-block;
+            background: #ff6b35;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin-top: 20px;
+            margin-right: 10px;
+            border: none;
+            cursor: pointer;
+        }
+        .button:hover { background: #ff5533; }
+        .button.secondary { background: #444; }
+        .button.secondary:hover { background: #555; }
+        .stats {
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 15px;
+        }
+        .path-config {
+            background: #0d0d0d;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ff6b35;
+        }
+        .path-config label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #ffaa44;
+        }
+        .path-config input {
+            width: 80%;
+            padding: 8px;
+            background: #1a1a1a;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .path-config button {
+            background: #ff6b35;
+            border: none;
+            color: white;
+            padding: 8px 15px;
+            margin-left: 10px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .path-config .current-path {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #88ff88;
+        }
+    </style>
+</head>
+<body>
+<div class="scanner-container">
+    <h1>🎵 MP3Player - Audio File Scanner</h1>
+    
+    <!-- Path Configuration Section -->
+    <div class="path-config">
+        <label>📁 Music Directory Path (supports absolute paths like I:\Music\relax\ or relative like music/)</label>
+        <form method="GET" action="scan.php" style="display: inline-block; width: 100%;">
+            <input type="text" name="set_music_path" value="<?php echo isset($_GET['set_music_path']) ? htmlspecialchars($_GET['set_music_path']) : (defined('MEDIAROOT') ? MEDIAROOT : 'music'); ?>" style="width: 70%;">
+            <button type="submit">Change Path</button>
+            <?php if(isset($_GET['rescan'])): ?>
+            <input type="hidden" name="rescan" value="<?php echo htmlspecialchars($_GET['rescan']); ?>">
+            <?php endif; ?>
+        </form>
+        <div class="current-path">
+            <?php
+            // Get current music path (from GET parameter, or MEDIAROOT constant, or default)
+            $current_music_path = MEDIAROOT;
+            if (isset($_GET['set_music_path']) && !empty($_GET['set_music_path'])) {
+                $current_music_path = $_GET['set_music_path'];
+                // Store in session for persistence
+                session_start();
+                $_SESSION['custom_music_path'] = $current_music_path;
+                session_write_close();
+            } elseif (session_status() === PHP_SESSION_NONE) {
+                session_start();
+                if (isset($_SESSION['custom_music_path'])) {
+                    $current_music_path = $_SESSION['custom_music_path'];
+                }
+                session_write_close();
+            }
+            ?>
+            Current scan directory: <strong style="color: #ffaa44;"><?php echo htmlspecialchars($current_music_path); ?></strong>
+        </div>
+    </div>
+    
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="log-box" id="logBox">
+        <div class="log-entry info">► Initializing scanner...</div>
+    </div>
+    <div class="stats" id="stats" style="display:none;"></div>
+    <div style="margin-top: 20px;">
+        <a href="player.php" class="button">🎮 Open Player</a>
+        <a href="library.php?view=options" class="button secondary">⚙️ Back to Options</a>
+        <button onclick="location.href='scan.php?rescan=1&set_music_path=<?php echo urlencode($current_music_path); ?>'" class="button secondary" onclick="return confirm('WARNING: This will DELETE all existing tracks and rescan from scratch! Continue?')">🔄 Full Rescan</button>
+    </div>
+</div>
+
+<script>
+function addLog(message, type) {
+    const logBox = document.getElementById('logBox');
+    const div = document.createElement('div');
+    div.className = 'log-entry ' + type;
+    div.innerHTML = message;
+    logBox.appendChild(div);
+    logBox.scrollTop = logBox.scrollHeight;
+}
+
+function updateProgress(percent) {
+    document.getElementById('progressFill').style.width = percent + '%';
+}
+
+function showStats(stats) {
+    const statsDiv = document.getElementById('stats');
+    statsDiv.innerHTML = stats;
+    statsDiv.style.display = 'block';
+}
+</script>
+
+<?php
+
+function jsLog($message, $type = 'info') {
+    $message = addslashes(htmlspecialchars($message));
+    echo "<script>addLog('$message', '$type');</script>\n";
+    flush();
+    ob_flush();
+}
+
+function jsProgress($percent) {
+    echo "<script>updateProgress($percent);</script>\n";
+    flush();
+    ob_flush();
+}
+
+jsLog("✓ Scanner initialized", "success");
+
+// ============================================
+// DATABASE CONNECTION
+// ============================================
+require_once('database.php');
+
+if (!$mysqli || $mysqli->connect_errno) {
+    jsLog("✗ Database connection failed: " . ($mysqli ? $mysqli->connect_error : "Connection error"), "error");
+    echo "</div></body></html>";
+    exit();
+}
+jsLog("✓ Database connected: " . $db_databasename, "success");
+
+// ============================================
+// CHECK/CREATE STORED PROCEDURES
+// ============================================
+jsLog("► Checking database procedures...", "info");
+
+// Check if InsertUpdateTrack exists
+$check = $mysqli->query("SHOW PROCEDURE STATUS WHERE Db = '" . $db_databasename . "' AND Name = 'InsertUpdateTrack'");
+if (!$check || $check->num_rows == 0) {
+    jsLog("  ⚠ InsertUpdateTrack not found - creating...", "warning");
+    
+    $mysqli->query("DROP PROCEDURE IF EXISTS InsertUpdateTrack");
+    
+    $create_sql = "CREATE PROCEDURE InsertUpdateTrack(
+        IN insert_track TEXT, 
+        IN insert_album TEXT, 
+        IN insert_artist TEXT, 
+        IN insert_path TEXT, 
+        IN insert_track_number INT, 
+        IN insert_cover TEXT, 
+        IN insert_duration INT, 
+        IN insert_length BIGINT, 
+        IN insert_genre TEXT
+    )
+    BEGIN
+        DECLARE artist_check INT DEFAULT NULL;
+        DECLARE album_check INT DEFAULT NULL;
+        DECLARE track_check INT DEFAULT NULL;
+
+        SELECT id INTO artist_check FROM artist WHERE title = insert_artist LIMIT 1;
+        SELECT al.id INTO album_check FROM album al INNER JOIN artist ar ON al.artist_id = ar.id WHERE ar.title = insert_artist AND al.title = insert_album LIMIT 1;
+        SELECT id INTO track_check FROM track WHERE path = insert_path LIMIT 1;
+
+        IF artist_check IS NULL THEN
+            INSERT INTO artist (title) VALUES (insert_artist);
+            SET artist_check = LAST_INSERT_ID();
+        END IF;
+        
+        IF album_check IS NULL THEN
+            INSERT INTO album (title, artist_id) VALUES (insert_album, artist_check);
+            SET album_check = LAST_INSERT_ID();
+        END IF;
+
+        IF track_check IS NOT NULL THEN
+            UPDATE track SET 
+                title = insert_track, 
+                artist_id = artist_check, 
+                album_id = album_check, 
+                track_number = insert_track_number, 
+                cover = insert_cover, 
+                duration = insert_duration, 
+                length = insert_length, 
+                genre = insert_genre
+            WHERE id = track_check;
+        ELSE
+            INSERT INTO track (title, artist_id, album_id, path, track_number, cover, duration, length, genre)
+            VALUES (insert_track, artist_check, album_check, insert_path, insert_track_number, insert_cover, insert_duration, insert_length, insert_genre);
+        END IF;
+    END";
+    
+    if ($mysqli->query($create_sql)) {
+        jsLog("  ✓ InsertUpdateTrack created", "success");
+    } else {
+        jsLog("  ✗ Failed to create InsertUpdateTrack: " . $mysqli->error, "error");
+    }
+} else {
+    jsLog("  ✓ InsertUpdateTrack exists", "success");
+}
+
+// Check PurgeAlbumArtist
+$check = $mysqli->query("SHOW PROCEDURE STATUS WHERE Db = '" . $db_databasename . "' AND Name = 'PurgeAlbumArtist'");
+if (!$check || $check->num_rows == 0) {
+    jsLog("  ⚠ PurgeAlbumArtist not found - creating...", "warning");
+    $mysqli->query("DROP PROCEDURE IF EXISTS PurgeAlbumArtist");
+    $mysqli->query("CREATE PROCEDURE PurgeAlbumArtist()
+    BEGIN
+        DELETE a FROM album a
+        JOIN (SELECT al.id FROM album al LEFT JOIN track t ON t.album_id = al.id GROUP BY al.id HAVING COUNT(t.id) = 0) del ON a.id = del.id;
+        DELETE a FROM artist a
+        JOIN (SELECT ar.id FROM artist ar LEFT JOIN album al ON al.artist_id = ar.id GROUP BY ar.id HAVING COUNT(al.id) = 0) del ON a.id = del.id;
+    END");
+    jsLog("  ✓ PurgeAlbumArtist created", "success");
+}
+
+// ============================================
+// CHECK getID3 LIBRARY
+// ============================================
+$getID3_path = 'php/getID3/getid3/getid3.php';
+if (!file_exists($getID3_path)) {
+    jsLog("✗ getID3 library not found at: " . $getID3_path, "error");
+    jsLog("  Please download getID3 and extract to php/getID3/", "warning");
+    echo "</div></body></html>";
+    exit();
+}
+
+require_once($getID3_path);
+$getID3 = new getID3;
+jsLog("✓ getID3 library loaded", "success");
+
+// ============================================
+// SETUP MUSIC DIRECTORY (SUPPORTS ABSOLUTE PATHS)
+// ============================================
+$THUMB_DIR = "music_thumb";
+
+// Get music directory path
+$MUSIC_DIR = $current_music_path;
+
+// Convert Windows backslashes to forward slashes for consistency
+$MUSIC_DIR = str_replace('\\', '/', $MUSIC_DIR);
+
+// Remove trailing slash if exists
+$MUSIC_DIR = rtrim($MUSIC_DIR, '/');
+
+jsLog("► Music directory configured: " . $MUSIC_DIR, "info");
+
+// Create thumbnail directory if it doesn't exist
+if (!is_dir($THUMB_DIR)) {
+    mkdir($THUMB_DIR, 0755, true);
+    jsLog("✓ Created thumbnail directory: $THUMB_DIR", "success");
+}
+
+// Check if music directory exists
+if (!is_dir($MUSIC_DIR)) {
+    jsLog("✗ Music directory not found: " . $MUSIC_DIR, "error");
+    jsLog("  Please create this directory or change the path above.", "warning");
+    jsLog("  For Windows paths, use forward slashes or double backslashes:", "info");
+    jsLog("  Examples: I:/Music/relax/ or C:/Users/Name/Music/", "info");
+    echo "</div></body></html>";
+    exit();
+}
+
+jsLog("✓ Music directory exists: " . realpath($MUSIC_DIR), "success");
+
+// ============================================
+// HANDLE RESCAN
+// ============================================
+if(isset($_GET['rescan']) && $_GET['rescan'] == 1) {
+    jsLog("", "info");
+    jsLog("═══════════════════════════════════════", "info");
+    jsLog("► FULL RESCAN MODE - Cleaning database...", "warning");
+    
+    $mysqli->query("SET FOREIGN_KEY_CHECKS = 0");
+    $tables = ['playlist_track', 'track', 'album', 'artist'];
+    foreach ($tables as $table) {
+        $mysqli->query("TRUNCATE TABLE $table");
+        jsLog("  ✓ Truncated: $table", "success");
+    }
+    $mysqli->query("SET FOREIGN_KEY_CHECKS = 1");
+    
+    if (is_dir($THUMB_DIR)) {
+        $files = glob($THUMB_DIR.'/*.jpg');
+        if ($files) {
+            $count = 0;
+            foreach($files as $file){
+                if(is_file($file)) { 
+                    unlink($file); 
+                    $count++;
+                }
+            }
+            jsLog("  ✓ Deleted $count thumbnail files", "success");
+        }
+    }
+    jsLog("═══════════════════════════════════════", "info");
+}
+
+// ============================================
+// SCAN FOR AUDIO FILES (SUPPORTS RECURSIVE SCANNING)
+// ============================================
+jsLog("", "info");
+jsLog("► Scanning for audio files in: " . $MUSIC_DIR, "info");
+jsLog("  (scanning subdirectories recursively)", "info");
+jsLog("", "info");
+
+// Collect all audio files recursively
+$audio_files = array();
+
+if (is_dir($MUSIC_DIR)) {
+    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($MUSIC_DIR, RecursiveDirectoryIterator::SKIP_DOTS));
+    
+    foreach ($iterator as $file) {
+        if ($file->isFile() && isAudioFile($file->getPathname())) {
+            $audio_files[] = $file->getPathname();
+        }
+    }
+}
+
+$total_files = count($audio_files);
+jsLog("Found " . $total_files . " audio file(s) to process", "info");
+
+if ($total_files == 0) {
+    jsLog("", "warning");
+    jsLog("⚠ No audio files found in: " . $MUSIC_DIR, "warning");
+    jsLog("  Supported formats: MP3, M4A, OGG, WAV, FLAC, MP4", "info");
+    jsLog("", "info");
+    jsLog("  Make sure your files have the correct extensions.", "info");
+    echo "</div></body></html>";
+    exit();
+}
+
+// Process files
+$processed = 0;
+$errors = 0;
+$fs_perm_warned = false;
+
+foreach ($audio_files as $index => $filepath) {
+    $processed++;
+    $percent = round(($processed / $total_files) * 100);
+    
+    // Show progress every 5 files or at 100%
+    if ($processed % 5 == 1 || $processed == $total_files || $processed == 1) {
+        jsProgress($percent);
+        jsLog("  Processing: " . $processed . "/" . $total_files . " (" . $percent . "%)", "info");
+    }
+    
+    try {
+        // Get file info
+        $FileInfo = $getID3->analyze($filepath);
+        getid3_lib::CopyTagsToComments($FileInfo);
+        
+        // Extract metadata
+        $filelength = filesize($filepath);
+        $playtime = isset($FileInfo['playtime_seconds']) ? (int)$FileInfo['playtime_seconds'] : 0;
+        $genre = isset($FileInfo['comments_html']['genre'][0]) ? $FileInfo['comments_html']['genre'][0] : "";
+        $artist = isset($FileInfo['comments_html']['artist'][0]) ? $FileInfo['comments_html']['artist'][0] : "Unknown Artist";
+        $album = isset($FileInfo['comments_html']['album'][0]) ? $FileInfo['comments_html']['album'][0] : "Unknown Album";
+        $title = isset($FileInfo['comments_html']['title'][0]) ? $FileInfo['comments_html']['title'][0] : pathinfo($filepath, PATHINFO_FILENAME);
+        
+        $track_number = 0;
+        if (isset($FileInfo['comments_html']['track_number'][0])) {
+            $track_number = $FileInfo['comments_html']['track_number'][0];
+            if (strpos((string)$track_number, '/') !== false) {
+                $track_number = explode('/', (string)$track_number)[0];
+            }
+        }
+        $track_number = (int)$track_number;
+        
+        // Extract cover art
+        $cover = null;
+        if (isset($FileInfo['comments']['picture'][0]) && !empty($FileInfo['comments']['picture'][0]['data'])) {
+            $cover_file = $THUMB_DIR . "/" . md5($filepath) . ".jpg";
+            if (@file_put_contents($cover_file, $FileInfo['comments']['picture'][0]['data'])) {
+                $cover = $cover_file;
+            } elseif (!$fs_perm_warned) {
+                $fs_perm_warned = true;
+                jsLog("  ⚠ Cannot write thumbnails to $THUMB_DIR (permission issue)", "warning");
+            }
+        }
+        
+        // Convert Windows path for database storage
+        $db_path = str_replace('\\', '/', $filepath);
+        
+        // Insert/Update track
+        $stmt = $mysqli->prepare("CALL InsertUpdateTrack(?, ?, ?, ?, ?, ?, ?, ?, ?)");
+        if ($stmt) {
+            $stmt->bind_param('ssssssiis', $title, $album, $artist, $db_path, $track_number, $cover, $playtime, $filelength, $genre);
+            if (!$stmt->execute()) {
+                $errors++;
+                if ($errors <= 5) {
+                    jsLog("  ✗ Error: " . basename($filepath) . " - " . $stmt->error, "error");
+                }
+            }
+            $stmt->close();
+        } else {
+            $errors++;
+        }
+        
+    } catch (Exception $e) {
+        $errors++;
+        if ($errors <= 10) {
+            jsLog("  ✗ Exception: " . basename($filepath) . " - " . $e->getMessage(), "error");
+        }
+    }
+}
+
+// Run cleanup
+jsLog("", "info");
+jsLog("► Cleaning up orphaned records...", "info");
+$mysqli->query("CALL PurgeAlbumArtist");
+
+// Get statistics
+$track_result = $mysqli->query("SELECT COUNT(*) as c FROM track");
+$track_count = $track_result ? $track_result->fetch_object()->c : 0;
+
+$album_result = $mysqli->query("SELECT COUNT(*) as c FROM album");
+$album_count = $album_result ? $album_result->fetch_object()->c : 0;
+
+$artist_result = $mysqli->query("SELECT COUNT(*) as c FROM artist");
+$artist_count = $artist_result ? $artist_result->fetch_object()->c : 0;
+
+jsProgress(100);
+jsLog("", "info");
+jsLog("═══════════════════════════════════════", "success");
+jsLog("✓ SCAN COMPLETED SUCCESSFULLY!", "success");
+jsLog("  • Music directory: " . $MUSIC_DIR, "info");
+jsLog("  • Files scanned: " . $processed, "info");
+jsLog("  • Tracks in database: " . $track_count, "success");
+jsLog("  • Albums: " . $album_count, "info");
+jsLog("  • Artists: " . $artist_count, "info");
+if ($errors > 0) {
+    jsLog("  • Errors: " . $errors, "warning");
+}
+jsLog("═══════════════════════════════════════", "success");
+
+$stats_html = "<strong>📊 Scan Statistics:</strong><br>
+               📁 Directory: " . htmlspecialchars($MUSIC_DIR) . "<br>
+               🎵 Tracks: $track_count | 💿 Albums: $album_count | 🎤 Artists: $artist_count<br>
+               📄 Files processed: $processed | ❌ Errors: $errors";
+echo "<script>showStats('" . addslashes($stats_html) . "');</script>";
+?>
+
+</div>
+</body>
+</html>
