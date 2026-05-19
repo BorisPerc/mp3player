@@ -1,11 +1,3 @@
-/*
-	Visualizer: whitebars.js
-	Author: Georg Sieber
-	Version: 1.0
-
-	like rainbowbars.js, but just white bars :-)
-*/
-
 var bars = 64;
 var gap = 4;
 
