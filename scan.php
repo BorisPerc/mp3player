@@ -1,7 +1,7 @@
 <?php
-	require_once('session.php');
-	require_once('global.php');
-	session_write_close(); // don't block other scripts by locking the session file
+require_once('session.php');
+require_once('global.php');
+session_write_close();
 ?>
 
 <!DOCTYPE html>
@@ -25,144 +25,184 @@
 
 	<div id="scanprogress">
 	<?php
-	require_once('php/getID3/getid3/getid3.php');
-	$getID3 = new getID3;
+	try {
+		require_once('php/getID3/getid3/getid3.php');
+		$getID3 = new getID3();
 
-	require_once('database.php');
-	$THUMB_DIR = "music_thumb";
-	$MUSIC_DIR = MEDIAROOT;
-//$MUSIC_DIR = "I:/Audio mp3/";
-	// remove old db entries and album cover thumbnails
-	if(isset($_GET['rescan']) && $_GET['rescan'] == 1) {
-		if (!$mysqli->multi_query(file_get_contents("sql/clean.sql")))
-			die("<b>ERROR TRUNCATING TABLES:</b><br>" . $mysqli->error . "<br>");
+		require_once('database.php');
+		$THUMB_DIR = THUMB_DIR;
+		$MUSIC_DIR = MEDIAROOT;
+
+		// Handle rescan
+		if (isset($_GET['rescan']) && $_GET['rescan'] == 1) {
+			echo "<b>Cleaning database...</b><br>";
+			if (!$mysqli->multi_query(file_get_contents("sql/clean.sql"))) {
+				throw new Exception("Database cleanup failed: " . $mysqli->error);
+			}
+			clearStoredResults($mysqli);
+
+			$files = @glob($THUMB_DIR . '/*');
+			if ($files) {
+				foreach ($files as $file) {
+					if (is_file($file)) @unlink($file);
+				}
+			}
+			echo "<b>Database cleaned.</b><br><br>";
+		}
+
+		echo "<b>Scanning: " . htmlspecialchars($MUSIC_DIR) . "</b><br>";
+
+		$counter = 0;
+		$fs_perm_warned = false;
+
+		if (!is_dir($THUMB_DIR)) {
+			mkdir($THUMB_DIR, 0755, true);
+		}
+
+		$it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($MUSIC_DIR));
+		foreach ($it as $file) {
+			$file_path = (string)$file;
+
+			if (!isAudioFile($file_path)) {
+				continue;
+			}
+
+			try {
+				// Check if already in database
+				$track_id = -1;
+				$track_cover = "";
+				$sql = "SELECT id, cover FROM track WHERE path = ?";
+				$statement = $mysqli->prepare($sql);
+				if ($statement) {
+					$statement->bind_param('s', $file_path);
+					if ($statement->execute()) {
+						$result = $statement->get_result();
+						if ($row = $result->fetch_assoc()) {
+							$track_id = (int)($row['id'] ?? -1);
+							$track_cover = $row['cover'] ?? "";
+						}
+					}
+					$statement->close();
+				}
+
+				// Analyze file
+				$FileInfo = $getID3->analyze($file_path);
+				if (method_exists('getid3_lib', 'CopyTagsToComments')) {
+					getid3_lib::CopyTagsToComments($FileInfo);
+				}
+
+				// Extract metadata safely
+				$comments = $FileInfo['comments_html'] ?? [];
+				$title = $comments['title'][0] ?? pathinfo($file_path, PATHINFO_FILENAME);
+				$album = $comments['album'][0] ?? "Unknown Album";
+				$artist = $comments['artist'][0] ?? "Unknown Artist";
+				$genre = $comments['genre'][0] ?? "";
+				$playtime = (int)($FileInfo['playtime_seconds'] ?? 0);
+				$filelength = (int)(@filesize($file_path) ?? 0);
+
+				// Extract track number
+				$track_number = 0;
+				if (isset($comments['track_number'][0])) {
+					$tn = $comments['track_number'][0];
+					if (strpos($tn, '/') !== false) {
+						$tn = explode('/', $tn)[0];
+					}
+					$track_number = (int)filter_var($tn, FILTER_SANITIZE_NUMBER_INT);
+				}
+
+				// Handle cover
+				$cover = null;
+				if (isset($FileInfo['comments']['picture'][0]) && is_array($FileInfo['comments']['picture'][0])) {
+					if ($track_id == -1 || $track_cover == "") {
+						$cover_file = $THUMB_DIR . "/" . findFreeImageNumber() . ".jpg";
+					} else {
+						$cover_file = $track_cover;
+					}
+
+					$pic_data = $FileInfo['comments']['picture'][0]['data'] ?? null;
+					if ($pic_data) {
+						if (@file_put_contents($cover_file, $pic_data) === false && !$fs_perm_warned) {
+							$fs_perm_warned = true;
+							echo "<b>WARNING:</b> Cannot write to thumbnail directory.<br>";
+						} else {
+							$cover = $cover_file;
+						}
+					}
+				}
+
+				// Insert/update track
+				$sql = "CALL InsertUpdateTrack(?, ?, ?, ?, ?, ?, ?, ?, ?)";
+				$statement = $mysqli->prepare($sql);
+				if ($statement) {
+					$statement->bind_param(
+						'sssssiiis',
+						$title, $album, $artist, $file_path, $track_number,
+						$cover, $playtime, $filelength, $genre
+					);
+					if (!$statement->execute()) {
+						echo "<b>Error processing:</b> " . htmlspecialchars($file_path) . "<br>";
+					}
+					$statement->close();
+				}
+
+				flush(); ob_flush();
+				$counter++;
+
+			} catch (Exception $e) {
+				error_log("Scan error: " . $e->getMessage());
+				continue;
+			}
+		}
+
+		// Clean removed tracks
+		echo "<br><b>Cleaning removed tracks...</b><br>";
+		$sql = "SELECT id, path FROM track";
+		$statement = $mysqli->prepare($sql);
+		if ($statement) {
+			$statement->execute();
+			$result = $statement->get_result();
+			while ($row = $result->fetch_assoc()) {
+				if (!file_exists($row['path'])) {
+					$del_stmt = $mysqli->prepare("DELETE FROM track WHERE id = ?");
+					if ($del_stmt) {
+						$del_stmt->bind_param('i', $row['id']);
+						$del_stmt->execute();
+						$del_stmt->close();
+					}
+				}
+			}
+			$statement->close();
+		}
+
+		// Purge orphaned
+		echo "<b>Purging orphaned albums/artists...</b><br>";
+		$sql = "CALL PurgeAlbumArtist()";
+		$statement = $mysqli->prepare($sql);
+		if ($statement) {
+			$statement->execute();
+			$statement->close();
+		}
+
 		clearStoredResults($mysqli);
 
-		$files = glob($THUMB_DIR.'/*');
-		foreach($files as $file){
-			if(is_file($file)) unlink($file);
-		}
+		echo "<br><b style='color:green'>✓ Scan finished!</b><br>";
+		echo "<b>Total tracks: $counter</b><br>";
+		echo "<a href='player.php' class='styled_link'>Open Player</a>";
+
+	} catch (Exception $e) {
+		error_log("Scan failed: " . $e->getMessage());
+		echo "<br><b style='color:red'>Error:</b> " . htmlspecialchars($e->getMessage()) . "<br>";
+		echo "<a href='player.php' class='styled_link'>Back to Player</a>";
 	}
 
-	// find all music files inside the music directory
-	$counter = 0;
-	$fs_perm_warned = false;
-	$it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($MUSIC_DIR));
-	foreach ($it as $file) {
-		if (isAudioFile($file)) {
-			// check if file is already in database
-			$track_id = -1;
-			$track_cover = "";
-			$sql = "SELECT tr.id AS 'id', tr.cover AS 'cover' FROM track tr WHERE tr.path = ?";
-			$statement = $mysqli->prepare($sql);
-			$statement->bind_param('s', $file);
-			if (!$statement->execute())
-				echo("<b>EXEC FAILED:</b>&nbsp;$file<br>$sql<br>".$statement->error."<br>");
-			$result = $statement->get_result();
-			if (!$result)
-				echo("<b>GET RESULT FAILED:</b>&nbsp;$file<br>$sql<br>".$statement->error."<br>");
-			while($row = $result->fetch_object()) {
-				$track_id = $row->id;
-				$track_cover = $row->cover;
-			}
-
-			// read id3 tags from file
-			$FileInfo = $getID3->analyze($file);
-			getid3_lib::CopyTagsToComments($FileInfo);
-
-			// get file length
-			$filelength = 0;
-			$filelength = filesize($file);
-
-			// read playtime
-			$playtime = 0;
-			if (isset($FileInfo['playtime_seconds']))
-				$playtime = $FileInfo['playtime_seconds'];
-
-			// read genre
-			$genre = null;
-			if (isset($FileInfo['comments_html']['genre'][0]))
-				$genre = $FileInfo['comments_html']['genre'][0];
-
-			// read artist
-			$artist = "Unknown Artist";
-			if (isset($FileInfo['comments_html']['artist'][0]))
-				$artist = $FileInfo['comments_html']['artist'][0];
-
-			// read album
-			$album = "Unknown Album";
-			if (isset($FileInfo['comments_html']['album'][0]))
-				$album = $FileInfo['comments_html']['album'][0];
-
-			// read title
-			$title = "Unknown Title";
-			if (isset($FileInfo['comments_html']['title'][0]))
-				$title = $FileInfo['comments_html']['title'][0];
-			else
-				$title = pathinfo($file)['filename'];
-
-			// read track number
-			$track_number = 0;
-			if (isset($FileInfo['comments_html']['track_number'][0]))
-				$track_number = $FileInfo['comments_html']['track_number'][0];
-			if (strpos($track_number, '/') !== false) $track_number = explode('/', $track_number)[0];
-
-			// read cover if available
-			$cover = null;
-			if (isset($FileInfo['comments']['picture'][0])
-			&& $FileInfo['comments']['picture'][0] != "") {
-				if ($track_id == -1 || $track_cover == "")
-					$filename = $THUMB_DIR . "/" . findFreeImageNumber() . ".jpg";
-				else
-					$filename = $track_cover;
-
-				if (file_put_contents($filename, $FileInfo['comments']['picture'][0]['data']) === false && $fs_perm_warned == false) {
-					$fs_perm_warned = true;
-					echo "<b>WARN:</b>&nbsp;Unable to write into cover thumbnail directory. Album covers will not be available.<br>";
-				}
-				$cover = $filename;
-			}
-
-			// call insert/update sql procedure
-			$sql = "CALL InsertUpdateTrack(?, ?, ?, ?, ?, ?, ?, ?, ?)";
-			$statement = $mysqli->prepare($sql);
-			if (!$statement)
-				echo("<b>PREPARE FAILED:</b>&nbsp;".$mysqli->error."<br>");
-			if (!$statement->bind_param('ssssssiis', $title, $album, $artist, $file, $track_number, $cover, $playtime, $filelength, $genre))
-				echo("<b>BIND FAILED:</b>&nbsp;$file<br>");
-			if (!$statement->execute())
-				echo("<b>EXEC FAILED:</b>&nbsp;$file<br>".$statement->error."<br>");
-
-			flush(); ob_flush();
-			$counter ++;
+	function findFreeImageNumber(): int {
+		$counter = 1;
+		while (file_exists(THUMB_DIR . "/" . $counter . ".jpg")) {
+			$counter++;
+			if ($counter > 100000) break;
 		}
+		return $counter;
 	}
-
-	// clean removed tracks
-	$sql = "SELECT * FROM track";
-	$statement = $mysqli->prepare($sql);
-	$statement->execute();
-	$result = $statement->get_result();
-	while($row = $result->fetch_object()) {
-		if(!file_exists($row->path)) {
-			$id = $row->id;
-			$sql = "DELETE FROM track WHERE id = ?";
-			$statement = $mysqli->prepare($sql);
-			$statement->bind_param('i', $id);
-			$statement->execute();
-		}
-	}
-
-	// call cleanup script
-	$sql = "CALL PurgeAlbumArtist";
-	$statement = $mysqli->prepare($sql);
-	if (!$statement)
-		echo("<b>PREPARE FAILED:</b>&nbsp;$sql<br>".$mysqli->error."<br>");
-	if (!$statement->execute())
-		echo("<b>EXEC FAILED:</b>&nbsp;$file<br>$sql<br>".$statement->error."<br>");
-
-	echo "<br><b>Finished - scanned $counter track(s).</b><br>";
-	echo "<a href='player.php' class='styled_link'>Open Player</a>";
 	?>
 	</div>
 
@@ -170,18 +210,3 @@
 
 </body>
 </html>
-
-<?php
-// find next free number for image file
-function findFreeImageNumber() {
-	global $THUMB_DIR;
-	$free = false;
-	$img_free_counter = 0;
-	while (!$free) {
-		$img_free_counter ++;
-		if (!file_exists($THUMB_DIR . "/" . $img_free_counter . ".jpg"))
-			$free = true;
-	}
-	return $img_free_counter;
-}
-?>

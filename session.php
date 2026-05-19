@@ -1,17 +1,28 @@
 <?php
-// set max session length
-$session_length_seconds = 60/*s*/ * 60/*m*/ * 24/*h*/ * 7/*d*/;
-ini_set('session.gc_maxlifetime', $session_length_seconds); // server should keep session data
-session_set_cookie_params($session_length_seconds); // each client should remember their session id
+/**
+ * Session Management - PHP 8.2+ Compatible
+ */
 
+require_once 'config.php';
 
-// session_set_cookie_params(86400,"/");
+// Configure session
+$session_options = [
+    'lifetime' => SESSION_LENGTH,
+    'path' => '/',
+    'domain' => '',
+    'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+    'httponly' => true,
+    'samesite' => 'Lax',
+];
 
-// start session
+session_set_cookie_params($session_options);
+
+// Start session
 session_start();
 
-if (!isset($_SESSION['username'])) { // if client is not logged in
-	header('Location: login.php'); // redirect to login page
-	die(); // abort current script
+// Check authentication
+if (!isset($_SESSION['username'])) {
+    header('Location: login.php');
+    exit();
 }
 ?>
