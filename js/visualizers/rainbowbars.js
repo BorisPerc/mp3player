@@ -1,19 +1,3 @@
-/*
-	Visualizer: rainbowbars.js
-	Author: Georg Sieber
-	Version: 1.0
-*/
-
-/*
-	GLOBAL VARIABLES EXPLANATION FOR DEVELOPING YOUR OWN VISUALIZER
-	audioPlayer - the HTML audio/video object
-	analyser - the audio contect createAnalyser() object
-	canvas - the HTML canvas object
-	draw - the canvas.getContext("2d") object
-	function renderFrame() - contains your visualizer render frame logic
-	--> should contain if(audioPlayer.paused == false && visualizerOn == true) to ensure your visualisation is not running while paused or video is running
-*/
-
 var bars = 64;
 var gap = 4;
 var colors =
