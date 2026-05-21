@@ -116,6 +116,10 @@ Visit the GitHub page for more information.
 
 # Windows XAmpp php7.4 install setup
 
+DOWNLOAD FOR WINDOWS OS: https://sourceforge.net/projects/xampp/files/XAMPP%20Windows/7.4.33/
+
+DOWNLOAD FOR MAC OSX: https://sourceforge.net/projects/xampp/files/XAMPP%20Mac%20OS%20X/7.4.33/
+
 http://localhost/phpmyadmin/
 
 User accounts
@@ -145,4 +149,35 @@ Setup database.php and visit your url of app
 ```
   $MUSIC_DIR = "D:/Audio/mp3/"; 
 ```
+
+  # Copilot GitHub AI php8.2-compatibility branch:
+
+  📍 WHERE TO FIND THE FIXES:
   
+Option 1: Download from GitHub (EASIEST)
+
+The fixes are on the php82-compatibility branch:
+
+🔗 Direct Link:
+Code
+https://github.com/BorisPerc/mp3player/tree/php82-compatibility
+Download as ZIP:
+Code
+https://github.com/BorisPerc/mp3player/archive/refs/heads/php82-compatibility.zip
+Option 2: Clone with Git
+bash
+git clone https://github.com/BorisPerc/mp3player.git
+cd mp3player
+git checkout php82-compatibility
+________________________________________
+📦 Audio Server - mp3player test Now:
+✅ Core PHP 8.2+ Fixes (DEPLOYED):
+•	config.php (NEW)
+•	database.php
+•	global.php
+•	session.php
+•	browser.php
+•	scan.php ⭐ Main fix
+•	PHP82_MIGRATION_GUIDE.md
+________________________________________
+
