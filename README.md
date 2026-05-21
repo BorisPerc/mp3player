@@ -149,6 +149,11 @@ Setup database.php and visit your url of app
 ```
   $MUSIC_DIR = "D:/Audio/mp3/"; 
 ```
+  line 34 example put your music disk Linux example:
+```
+  $MUSIC_DIR = "/media/audio/mp3/"; 
+```
+
 
   # Copilot GitHub AI php8.2-compatibility branch:
 
