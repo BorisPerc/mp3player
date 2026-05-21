@@ -161,23 +161,35 @@ The fixes are on the php82-compatibility branch:
 🔗 Direct Link:
 Code
 https://github.com/BorisPerc/mp3player/tree/php82-compatibility
+
 Download as ZIP:
 Code
 https://github.com/BorisPerc/mp3player/archive/refs/heads/php82-compatibility.zip
+
 Option 2: Clone with Git
 bash
 git clone https://github.com/BorisPerc/mp3player.git
+
 cd mp3player
+
 git checkout php82-compatibility
 ________________________________________
 📦 Audio Server - mp3player test Now:
+
 ✅ Core PHP 8.2+ Fixes (DEPLOYED):
+
 •	config.php (NEW)
+
 •	database.php
+
 •	global.php
+
 •	session.php
+
 •	browser.php
+
 •	scan.php ⭐ Main fix
+
 •	PHP82_MIGRATION_GUIDE.md
 ________________________________________
 
