@@ -115,10 +115,13 @@ Found a bug? Great! Please report it (preferably with a ready-to-use fix for it 
 Visit the GitHub page for more information.
 
 # Windows XAmpp php7.4 install setup
+________________________________________
 
 DOWNLOAD FOR WINDOWS OS: https://sourceforge.net/projects/xampp/files/XAMPP%20Windows/7.4.33/
+________________________________________
 
 DOWNLOAD FOR MAC OSX: https://sourceforge.net/projects/xampp/files/XAMPP%20Mac%20OS%20X/7.4.33/
+________________________________________
 
 http://localhost/phpmyadmin/
 
@@ -155,6 +158,7 @@ Setup database.php and visit your url of app
 ```
 
 
+________________________________________
   # Copilot GitHub AI php8.2-compatibility branch:
 
   📍 WHERE TO FIND THE FIXES:
@@ -197,4 +201,8 @@ ________________________________________
 
 •	PHP82_MIGRATION_GUIDE.md
 ________________________________________
+
+# Windows or Macintosh PC source app XAMPP
+
+https://sourceforge.net/projects/xampp/
 
