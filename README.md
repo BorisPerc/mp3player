@@ -159,7 +159,7 @@ Setup database.php and visit your url of app
 
 
 ________________________________________
-  # Copilot GitHub AI php8.2-compatibility branch:
+  # PHP 8.2 - compatibility branch:
 
   📍 WHERE TO FIND THE FIXES:
   
@@ -183,7 +183,7 @@ cd mp3player
 
 git checkout php82-compatibility
 ________________________________________
-📦 Audio Server - mp3player test New version:
+📦 Audio Server - mp3player New version:
 
 ✅ Core PHP 8.2+ Fixes (DEPLOYED):
 
@@ -200,6 +200,8 @@ ________________________________________
 •	scan.php ⭐ Main fix
 
 •	PHP82_MIGRATION_GUIDE.md
+
+Copilot GitHub AI
 ________________________________________
 
 # Windows or Macintosh PC source app XAMPP
