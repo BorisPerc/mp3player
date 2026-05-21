@@ -174,7 +174,7 @@ cd mp3player
 
 git checkout php82-compatibility
 ________________________________________
-📦 Audio Server - mp3player test Now:
+📦 Audio Server - mp3player test New version:
 
 ✅ Core PHP 8.2+ Fixes (DEPLOYED):
 
