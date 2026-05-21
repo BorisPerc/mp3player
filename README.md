@@ -159,15 +159,15 @@ Option 1: Download from GitHub (EASIEST)
 The fixes are on the php82-compatibility branch:
 
 🔗 Direct Link:
-Code
+
 https://github.com/BorisPerc/mp3player/tree/php82-compatibility
 
 Download as ZIP:
-Code
+
 https://github.com/BorisPerc/mp3player/archive/refs/heads/php82-compatibility.zip
 
 Option 2: Clone with Git
-bash
+
 git clone https://github.com/BorisPerc/mp3player.git
 
 cd mp3player
