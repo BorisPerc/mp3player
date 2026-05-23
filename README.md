@@ -203,6 +203,14 @@ ________________________________________
 
 •	PHP82_MIGRATION_GUIDE.md
 
+Extra define other root of music in config.php
+
+```
+// Only define once, in config.php
+if (!defined('MEDIAROOT')) {
+    define('MEDIAROOT', 'i:\Music\deephouse\/');
+}
+```
 Copilot GitHub AI
 ________________________________________
 
