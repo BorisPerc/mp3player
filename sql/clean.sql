@@ -1,11 +1,13 @@
 SET foreign_key_checks = 0;
 
-TRUNCATE TABLE track;
-TRUNCATE TABLE album;
-TRUNCATE TABLE artist;
-TRUNCATE TABLE playlist_track;
-TRUNCATE TABLE playlist;
-TRUNCATE TABLE playlist_party;
-TRUNCATE TABLE remote;
+DROP TABLE IF EXISTS `track`;
+DROP TABLE IF EXISTS `album`;
+DROP TABLE IF EXISTS `artist`;
+DROP TABLE IF EXISTS `playlist_track`;
+DROP TABLE IF EXISTS `playlist`;
+DROP TABLE IF EXISTS `playlist_party`;
+DROP TABLE IF EXISTS `remote`;
+DROP TABLE IF EXISTS `download`;
+DROP TABLE IF EXISTS `setting`;
 
 SET foreign_key_checks = 1;
