@@ -182,6 +182,8 @@ git clone https://github.com/BorisPerc/mp3player.git
 cd mp3player
 
 git checkout php82-compatibility
+
+RUN setup.php
 ________________________________________
 📦 Audio Server - mp3player New version:
 
